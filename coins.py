@@ -1,100 +1,177 @@
 import streamlit as st
-import random
-import time
+from streamlit.components.v1 import html
 
-# --- Page Config ---
-st.set_page_config(page_title="Keyboard Coin Catcher", layout="centered")
+st.set_page_config(page_title="Coin Catcher", layout="centered")
 
-# --- CSS ---
-st.markdown("""
+html("""
+<!DOCTYPE html>
+<html>
+<head>
 <style>
-.game-board {
-    position: relative;
+body {
+    margin: 0;
+    background: transparent;
+    font-family: sans-serif;
+}
+#game {
     width: 100%;
     height: 400px;
     background: #1e1e2f;
     border-radius: 15px;
     border: 3px solid #444;
+    position: relative;
     overflow: hidden;
+    cursor: none;
 }
-.instructions {
-    color: #888;
-    font-size: 0.8em;
-    text-align: center;
+#bag {
+    position: absolute;
+    bottom: 10px;
+    font-size: 48px;
+    transform: translateX(-50%);
+}
+.coin {
+    position: absolute;
+    font-size: 28px;
+}
+#ui {
+    margin-top: 10px;
+    color: #fff;
+    display: flex;
+    justify-content: space-between;
+}
+#overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    color: white;
+    font-size: 24px;
+}
+button {
+    padding: 8px 16px;
+    font-size: 16px;
+    cursor: pointer;
 }
 </style>
-""", unsafe_allow_html=True)
+</head>
 
-# --- Init State ---
-if "score" not in st.session_state:
-    st.session_state.score = 0
-if "bag_x" not in st.session_state:
-    st.session_state.bag_x = 50
-if "coins" not in st.session_state:
-    st.session_state.coins = []
-if "last_time" not in st.session_state:
-    st.session_state.last_time = time.time()
+<body>
 
-# --- Controls ---
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("⬅️ A"):
-        st.session_state.bag_x = max(5, st.session_state.bag_x - 5)
-with col2:
-    if st.button("D ➡️"):
-        st.session_state.bag_x = min(95, st.session_state.bag_x + 5)
-
-st.markdown("<p class='instructions'>Press A / D or click buttons</p>", unsafe_allow_html=True)
-
-# --- Timing ---
-now = time.time()
-dt = now - st.session_state.last_time
-st.session_state.last_time = now
-
-# --- Spawn Coins ---
-if random.random() < 0.05:
-    st.session_state.coins.append({
-        "x": random.randint(5, 95),
-        "y": 0.0,
-        "speed": random.uniform(25, 40)  # smoother
-    })
-
-# --- Update Coins ---
-new_coins = []
-for coin in st.session_state.coins:
-    coin["y"] += coin["speed"] * dt
-
-    # Catch
-    if coin["y"] >= 80 and abs(coin["x"] - st.session_state.bag_x) < 10:
-        st.session_state.score += 10
-    elif coin["y"] < 100:
-        new_coins.append(coin)
-
-st.session_state.coins = new_coins
-
-# --- Render ---
-st.subheader(f"💰 Score: {st.session_state.score}")
-
-coins_html = "".join(
-    f'<div style="position:absolute;left:{c["x"]}%;top:{c["y"]}%;font-size:28px;">🪙</div>'
-    for c in st.session_state.coins
-)
-
-st.markdown(f"""
-<div class="game-board">
-    {coins_html}
-    <div style="
-        position:absolute;
-        left:{st.session_state.bag_x}%;
-        bottom:10px;
-        font-size:50px;
-        transform:translateX(-50%);
-        transition:left 0.05s linear;">
-        👜
+<div id="game">
+    <div id="bag">👜</div>
+    <div id="overlay">
+        <div id="message">🪙 Coin Catcher</div>
+        <button onclick="startGame()">開始遊戲</button>
     </div>
 </div>
-""", unsafe_allow_html=True)
 
-# --- FPS Control ---
-time.sleep(0.05)  # ~20 FPS
-st.rerun()
+<div id="ui">
+    <div>分數：<span id="score">0</span></div>
+    <div>時間：<span id="time">60</span>s</div>
+</div>
+
+<script>
+const game = document.getElementById("game");
+const bag = document.getElementById("bag");
+const scoreEl = document.getElementById("score");
+const timeEl = document.getElementById("time");
+const overlay = document.getElementById("overlay");
+const message = document.getElementById("message");
+
+let coins = [];
+let score = 0;
+let timeLeft = 60;
+let running = false;
+let lastTime = performance.now();
+
+// 不同價值錢幣
+const coinTypes = [
+    { icon: "🪙", value: 10, speed: 80 },
+    { icon: "💰", value: 30, speed: 100 },
+    { icon: "💎", value: 50, speed: 130 }
+];
+
+// 滑鼠控制包包（固定高度）
+game.addEventListener("mousemove", e => {
+    if (!running) return;
+    const rect = game.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    bag.style.left = x + "px";
+});
+
+// 開始遊戲
+function startGame() {
+    coins = [];
+    score = 0;
+    timeLeft = 60;
+    running = true;
+    scoreEl.textContent = score;
+    timeEl.textContent = timeLeft;
+    overlay.style.display = "none";
+    lastTime = performance.now();
+    requestAnimationFrame(gameLoop);
+
+    const timer = setInterval(() => {
+        if (!running) {
+            clearInterval(timer);
+            return;
+        }
+        timeLeft--;
+        timeEl.textContent = timeLeft;
+        if (timeLeft <= 0) endGame();
+    }, 1000);
+}
+
+// 結束
+function endGame() {
+    running = false;
+    overlay.style.display = "flex";
+    message.innerHTML = `⏱️ 時間到<br>得分：${score}`;
+}
+
+// 生成錢幣
+function spawnCoin() {
+    const type = coinTypes[Math.floor(Math.random() * coinTypes.length)];
+    const coin = document.createElement("div");
+    coin.className = "coin";
+    coin.textContent = type.icon;
+    coin.dataset.value = type.value;
+    coin.dataset.speed = type.speed;
+    coin.style.left = Math.random() * 90 + "%";
+    coin.style.top = "-30px";
+    game.appendChild(coin);
+    coins.push(coin);
+}
+
+// 遊戲主循環
+function gameLoop(now) {
+    if (!running) return;
+    const dt = (now - lastTime) / 1000;
+    lastTime = now;
+
+    if (Math.random() < 0.04) spawnCoin();
+
+    coins = coins.filter(coin => {
+        let y = coin.offsetTop + coin.dataset.speed * dt;
+        coin.style.top = y + "px";
+
+        const bagRect = bag.getBoundingClientRect();
+        const coinRect = coin.getBoundingClientRect();
+
+        if (
+            coinRect.bottom >= bagRect.top &&
+            coinRect.left < bagRect.right &&
+            coinRect.right > bagRect.left
+        ) {
+            score += Number(coin.dataset.value);
+            scoreEl.textContent = score;
+            coin.remove();
+            return false;
+        }
+
+        if (y > 400) {
+            coin.remove();
+            ret
