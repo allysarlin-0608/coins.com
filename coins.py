@@ -3,7 +3,6 @@ from streamlit.components.v1 import html
 
 st.set_page_config(page_title="Coin Catcher", layout="centered")
 
-# --- Supabase（沒有設定也不會爆） ---
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 
@@ -90,7 +89,6 @@ let target = 200;
 let running = false;
 let last = performance.now();
 
-// --- 開始 / 重置遊戲 ---
 function start() {{
     const name = document.getElementById("name").value.trim();
     if(!name) {{
@@ -115,7 +113,6 @@ function start() {{
     running = true;
 }}
 
-// --- 生成物品 ---
 function spawn() {{
     const bombChance = Math.min(0.1 + level * 0.04, 0.5);
     const isBomb = Math.random() < bombChance;
@@ -127,10 +124,9 @@ function spawn() {{
     el.style.top = "-30px";
 
     game.appendChild(el);
-    items.push({{ el, isBomb, y:0, vy:50 + level * 15 }});
+    items.push({{ el, isBomb, y:0, vy:60 + level * 20 }});
 }}
 
-// --- 下一關 ---
 function nextLevel() {{
     level++;
     life = 5;
@@ -141,7 +137,6 @@ function nextLevel() {{
     document.getElementById("target").innerText = target;
 }}
 
-// --- Game Over ---
 function gameOver() {{
     running = false;
     overlay.style.display = "flex";
@@ -164,14 +159,13 @@ function gameOver() {{
     }}
 }}
 
-// --- 主迴圈 ---
 function loop(t) {{
     if(!running) return;
 
     const dt = (t - last) / 1000;
     last = t;
 
-    if(Math.random() < 0.01 + level * 0.005) spawn();
+    if(Math.random() < 0.013 + level * 0.006) spawn();
 
     items = items.filter(it => {{
         it.y += it.vy * dt;
@@ -216,7 +210,6 @@ function loop(t) {{
     requestAnimationFrame(loop);
 }}
 
-// --- 控制 ---
 game.addEventListener("mousemove", e => {{
     if(!running) return;
     const x = e.clientX - game.getBoundingClientRect().left;
