@@ -3,72 +3,77 @@ import random
 import time
 
 # --- Page Config ---
-st.set_page_config(page_title="Mouse Coin Catcher", layout="centered")
+st.set_page_config(page_title="Coin Catcher", layout="centered")
 
-# Custom CSS to make the game look better
+# CSS to style the game board and hide the slider label
 st.markdown("""
     <style>
-    .game-container {
-        background-color: #1e1e1e;
-        border-radius: 10px;
-        padding: 20px;
-        text-align: center;
-        color: white;
+    .game-board {
+        position: relative; 
+        width: 100%; 
+        height: 400px; 
+        background: linear-gradient(to bottom, #1e3c72, #2a5298); 
+        border-radius: 15px; 
+        overflow: hidden;
+        border: 4px solid #f1c40f;
     }
-    .coin { font-size: 30px; position: absolute; transition: top 0.5s linear; }
-    .bag { font-size: 50px; position: absolute; bottom: 20px; }
+    /* This makes the slider feel more like a controller */
+    div[data-testid="stSlider"] {
+        padding-top: 20px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- Mouse Tracking Logic ---
-# This JavaScript snippet tracks the mouse and sends the 'x' position to Streamlit
-from streamlit_components_js import st_canvas # If using a library, but let's stick to core logic
-
+# --- Initialize Game State ---
 if 'score' not in st.session_state:
     st.session_state.score = 0
 if 'coins' not in st.session_state:
-    st.session_state.coins = [] # Each coin: [x, y, value, emoji]
+    st.session_state.coins = [] # List of [x, y, value, emoji]
 
-# Helper to spawn coins
+# --- Game Logic ---
+# 1. Spawn coins randomly
 if random.random() < 0.2:
-    st.session_state.coins.append([random.randint(5, 95), 0, 10, "🪙"])
+    x_pos = random.randint(5, 95)
+    # Randomly pick coin type: (Value, Emoji)
+    ctype = random.choice([(10, "🥇"), (5, "🥈"), (1, "🥉")])
+    st.session_state.coins.append([x_pos, 0, ctype[0], ctype[1]])
 
-# --- The "Game Screen" ---
-st.title(f"💰 Score: {st.session_state.score}")
+# 2. Control Input (Mouse/Drag via Slider)
+# This acts as your "Mouse Follow" mechanism
+st.subheader(f"💰 Score: {st.session_state.score}")
+bag_x = st.slider("Move Mouse/Slider to Catch!", 0, 100, 50)
 
-# Mouse Control via a Slider (Easiest way in Streamlit without complex JS)
-# We use a slider to simulate the bag position
-bag_x = st.slider("Move the Bag", 0, 100, 50, label_visibility="collapsed")
-
-# --- Game Update ---
+# 3. Update Coin Positions & Check Collisions
 new_coins = []
 for coin in st.session_state.coins:
-    coin[1] += 10 # Move y coordinate down
+    coin[1] += 8  # Falling speed
     
-    # Collision detection (Bag is at y=90, width approx 10 units)
+    # Catching logic (if coin is near the bottom and aligns with bag_x)
     if coin[1] >= 80 and abs(coin[0] - bag_x) < 10:
         st.session_state.score += coin[2]
+        # Coin is caught, so don't add to new_coins
     elif coin[1] < 100:
         new_coins.append(coin)
 
 st.session_state.coins = new_coins
 
 # --- Rendering ---
-# We use a simple container to draw the "game world"
+# Create the HTML for the game board
+coins_html = ""
+for coin in st.session_state.coins:
+    coins_html += f'<div style="position: absolute; left: {coin[0]}%; top: {coin[1]}%; font-size: 30px;">{coin[3]}</div>'
+
 game_html = f"""
-<div style="position: relative; width: 100%; height: 400px; background: #2c3e50; border-radius: 15px; overflow: hidden;">
-    <div style="position: absolute; left: {bag_x}%; bottom: 10px; font-size: 40px; transform: translateX(-50%);">
+<div class="game-board">
+    {coins_html}
+    <div style="position: absolute; left: {bag_x}%; bottom: 10px; font-size: 50px; transform: translateX(-50%);">
         👜
     </div>
+</div>
 """
-
-for coin in st.session_state.coins:
-    game_html += f'<div style="position: absolute; left: {coin[0]}%; top: {coin[1]}%; font-size: 30px;">{coin[3]}</div>'
-
-game_html += "</div>"
 
 st.markdown(game_html, unsafe_allow_html=True)
 
-# This creates the "Animation" loop
+# 4. The Loop
 time.sleep(0.1)
 st.rerun()
