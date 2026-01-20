@@ -1,7 +1,7 @@
 import streamlit as st
 from streamlit.components.v1 import html
 
-st.set_page_config(page_title="Emoji Coin Catcher", layout="wide")
+st.set_page_config(page_title="Coin Catcher", layout="wide")
 
 HTML = """
 <!DOCTYPE html>
@@ -14,42 +14,58 @@ HTML = """
 body {
   margin: 0;
   overflow: hidden;
-  background: linear-gradient(#111, #000);
+  background: radial-gradient(circle at top, #222, #000);
   touch-action: none;
-  color: white;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont;
 }
 
+/* 遊戲區 */
 #game {
   position: relative;
   width: 100vw;
   height: 100vh;
 }
 
-/* UI */
-#ui {
-  position: fixed;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 18px;
-  font-size: 16px;
-  z-index: 10;
-}
-
-.ui-box {
-  background: rgba(0,0,0,0.6);
-  padding: 6px 12px;
-  border-radius: 10px;
-}
-
-/* 錢幣 */
+/* 🪙 錢幣樣式 */
 .coin {
   position: absolute;
-  font-size: 36px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 30%, #fff6b0, #f5c542 40%, #d4a017 70%);
+  border: 3px solid #b8860b;
+  box-shadow:
+    inset 2px 2px 4px rgba(255,255,255,0.6),
+    inset -2px -2px 4px rgba(0,0,0,0.4),
+    0 6px 10px rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  color: #6b4e00;
+  font-size: 16px;
   user-select: none;
   transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+/* 不同價值用內圈表示 */
+.coin.v2::after,
+.coin.v3::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+}
+
+.coin.v2::after {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(255,255,255,0.6);
+}
+
+.coin.v3::after {
+  width: 28px;
+  height: 28px;
+  border: 2px dashed rgba(255,255,255,0.8);
 }
 
 /* 玩家 */
@@ -62,19 +78,12 @@ body {
   background: linear-gradient(#eee, #aaa);
   border-radius: 12px;
   transform: translateX(-50%);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.6);
 }
 </style>
 </head>
 
 <body>
-
-<div id="ui">
-  <div class="ui-box">❤️ <span id="life">5</span></div>
-  <div class="ui-box">⭐ 分數 <span id="score">0</span></div>
-  <div class="ui-box">🚀 關卡 <span id="level">1</span></div>
-  <div class="ui-box">🎯 目標 <span id="target">200</span></div>
-</div>
-
 <div id="game">
   <div id="player"></div>
 </div>
@@ -83,77 +92,65 @@ body {
 const game = document.getElementById("game");
 const player = document.getElementById("player");
 
-const lifeEl = document.getElementById("life");
-const scoreEl = document.getElementById("score");
-const levelEl = document.getElementById("level");
-const targetEl = document.getElementById("target");
-
 const W = window.innerWidth;
 const H = window.innerHeight;
 
 let items = [];
+let level = 1;
 let audioCtx = null;
 
-/* 遊戲狀態 */
-let life = 5;
-let score = 0;
-let level = 1;
-let target = 200;
-let running = true;
-
-/* 音訊初始化 */
+/* 啟用音訊（需要互動） */
 function initAudio() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }
 }
 
-/* 播放音效 */
+/* 播放音調 */
 function playTone(freq) {
   if (!audioCtx) return;
+
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
+
   osc.type = "triangle";
   osc.frequency.value = freq;
-  gain.gain.value = 0.2;
-  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+
+  gain.gain.value = 0.18;
+  gain.gain.exponentialRampToValueAtTime(
+    0.001, audioCtx.currentTime + 0.18
+  );
+
   osc.connect(gain);
   gain.connect(audioCtx.destination);
+
   osc.start();
-  osc.stop(audioCtx.currentTime + 0.2);
+  osc.stop(audioCtx.currentTime + 0.18);
 }
 
 /* 生成錢幣 */
 function spawn() {
   const el = document.createElement("div");
-  el.className = "coin";
 
-  const r = Math.random();
-  let value, emoji, points, freq;
+  const value =
+    Math.random() < 0.6 ? 1 :
+    Math.random() < 0.85 ? 2 : 3;
 
-  if (r < 0.6) {
-    emoji = "🪙"; points = 10; freq = 520;
-  } else if (r < 0.9) {
-    emoji = "💰"; points = 25; freq = 740;
-  } else {
-    emoji = "💎"; points = 50; freq = 1000;
-  }
+  el.className = "coin v" + value;
 
-  el.textContent = emoji;
   game.appendChild(el);
 
   items.push({
     el,
-    points,
-    freq,
-    x: Math.random() * (W - 40),
+    value,
+    x: Math.random() * (W - 42),
     y: -50,
-    vy: 150 + level * 30,
-    vx: (Math.random() - 0.5) * 80
+    vy: 130 + level * 25,
+    vx: (Math.random() - 0.5) * 70
   });
 }
 
-/* 一開始就掉 */
+/* 一開始就有錢幣 */
 for (let i = 0; i < 6; i++) spawn();
 
 /* 玩家控制 */
@@ -162,8 +159,10 @@ function movePlayer(x) {
 }
 
 document.addEventListener("mousemove", e => movePlayer(e.clientX));
-document.addEventListener("touchstart", () => initAudio());
-document.addEventListener("touchmove", e => movePlayer(e.touches[0].clientX));
+document.addEventListener("touchstart", e => initAudio());
+document.addEventListener("touchmove", e => {
+  movePlayer(e.touches[0].clientX);
+});
 
 /* 碰撞 */
 function hit(a, b) {
@@ -175,47 +174,31 @@ function hit(a, b) {
            ar.top > br.bottom);
 }
 
-/* 下一關 */
-function nextLevel() {
-  level++;
-  target += 200;
-  levelEl.textContent = level;
-  targetEl.textContent = target;
-}
-
-/* Game Over */
-function gameOver() {
-  running = false;
-  alert("Game Over\\n你的分數：" + score);
-  location.reload();
-}
-
 /* 更新 */
 function update(dt) {
-  if (!running) return;
-
-  if (Math.random() < 0.08) spawn();
+  if (Math.random() < 0.06) spawn();
 
   items.forEach((item, i) => {
     item.y += item.vy * dt;
     item.x += item.vx * dt;
 
-    if (item.x < 0 || item.x > W - 40) item.vx *= -1;
+    if (item.x < 0 || item.x > W - 42) item.vx *= -1;
 
     item.el.style.transform =
       `translate(${item.x}px, ${item.y}px)`;
 
     if (hit(item.el, player)) {
-      playTone(item.freq);
+      const freq =
+        item.value === 1 ? 520 :
+        item.value === 2 ? 720 : 980;
+
+      playTone(freq);
 
       if (navigator.vibrate) {
-        navigator.vibrate(item.points === 50 ? 70 : 30);
+        navigator.vibrate(item.value === 3 ? 60 : 30);
       }
 
-      score += item.points;
-      scoreEl.textContent = score;
-
-      item.el.style.transform += " scale(1.6)";
+      item.el.style.transform += " scale(1.5)";
       item.el.style.opacity = "0";
 
       setTimeout(() => item.el.remove(), 200);
@@ -225,15 +208,8 @@ function update(dt) {
     if (item.y > H + 60) {
       item.el.remove();
       items.splice(i, 1);
-      life--;
-      lifeEl.textContent = life;
-      if (life <= 0) gameOver();
     }
   });
-
-  if (score >= target) {
-    nextLevel();
-  }
 }
 
 /* 主迴圈 */
