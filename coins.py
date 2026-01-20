@@ -3,7 +3,8 @@ from streamlit.components.v1 import html
 
 st.set_page_config(page_title="Coin Catcher", layout="centered")
 
-html("""
+html(
+    '''
 <!DOCTYPE html>
 <html>
 <head>
@@ -87,14 +88,12 @@ let timeLeft = 60;
 let running = false;
 let lastTime = performance.now();
 
-// 不同價值錢幣
 const coinTypes = [
     { icon: "🪙", value: 10, speed: 80 },
     { icon: "💰", value: 30, speed: 100 },
     { icon: "💎", value: 50, speed: 130 }
 ];
 
-// 滑鼠控制包包（固定高度）
 game.addEventListener("mousemove", e => {
     if (!running) return;
     const rect = game.getBoundingClientRect();
@@ -102,8 +101,8 @@ game.addEventListener("mousemove", e => {
     bag.style.left = x + "px";
 });
 
-// 開始遊戲
 function startGame() {
+    coins.forEach(c => c.remove());
     coins = [];
     score = 0;
     timeLeft = 60;
@@ -125,14 +124,12 @@ function startGame() {
     }, 1000);
 }
 
-// 結束
 function endGame() {
     running = false;
     overlay.style.display = "flex";
-    message.innerHTML = `⏱️ 時間到<br>得分：${score}`;
+    message.innerHTML = "⏱️ 時間到<br>得分：" + score;
 }
 
-// 生成錢幣
 function spawnCoin() {
     const type = coinTypes[Math.floor(Math.random() * coinTypes.length)];
     const coin = document.createElement("div");
@@ -146,7 +143,6 @@ function spawnCoin() {
     coins.push(coin);
 }
 
-// 遊戲主循環
 function gameLoop(now) {
     if (!running) return;
     const dt = (now - lastTime) / 1000;
@@ -174,4 +170,18 @@ function gameLoop(now) {
 
         if (y > 400) {
             coin.remove();
-            ret
+            return false;
+        }
+
+        return true;
+    });
+
+    requestAnimationFrame(gameLoop);
+}
+</script>
+
+</body>
+</html>
+''',
+    height=520
+)
