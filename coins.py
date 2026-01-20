@@ -14,43 +14,71 @@ HTML = """
 body {
   margin: 0;
   overflow: hidden;
-  background: #111;
+  background: radial-gradient(circle at top, #222, #000);
   touch-action: none;
 }
 
+/* 遊戲區 */
 #game {
   position: relative;
   width: 100vw;
   height: 100vh;
 }
 
+/* 🪙 錢幣樣式 */
 .coin {
   position: absolute;
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 30%, #fff6b0, #f5c542 40%, #d4a017 70%);
+  border: 3px solid #b8860b;
+  box-shadow:
+    inset 2px 2px 4px rgba(255,255,255,0.6),
+    inset -2px -2px 4px rgba(0,0,0,0.4),
+    0 6px 10px rgba(0,0,0,0.6);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  color: #000;
+  color: #6b4e00;
+  font-size: 16px;
   user-select: none;
-  transition: transform 0.2s, opacity 0.2s;
+  transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
-.v1 { background: gold; }
-.v2 { background: deepskyblue; }
-.v3 { background: violet; }
+/* 不同價值用內圈表示 */
+.coin.v2::after,
+.coin.v3::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+}
 
+.coin.v2::after {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(255,255,255,0.6);
+}
+
+.coin.v3::after {
+  width: 28px;
+  height: 28px;
+  border: 2px dashed rgba(255,255,255,0.8);
+}
+
+/* 玩家 */
 #player {
   position: absolute;
-  bottom: 20px;
+  bottom: 24px;
   left: 50%;
-  width: 80px;
-  height: 20px;
-  background: white;
-  border-radius: 10px;
+  width: 90px;
+  height: 22px;
+  background: linear-gradient(#eee, #aaa);
+  border-radius: 12px;
   transform: translateX(-50%);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.6);
 }
 </style>
 </head>
@@ -71,76 +99,72 @@ let items = [];
 let level = 1;
 let audioCtx = null;
 
-// ===== 啟動音訊（需要互動）=====
+/* 啟用音訊（需要互動） */
 function initAudio() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }
 }
 
-// ===== 播放音調 =====
+/* 播放音調 */
 function playTone(freq) {
   if (!audioCtx) return;
 
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
 
-  osc.type = "sine";
+  osc.type = "triangle";
   osc.frequency.value = freq;
 
-  gain.gain.value = 0.15;
-  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+  gain.gain.value = 0.18;
+  gain.gain.exponentialRampToValueAtTime(
+    0.001, audioCtx.currentTime + 0.18
+  );
 
   osc.connect(gain);
   gain.connect(audioCtx.destination);
 
   osc.start();
-  osc.stop(audioCtx.currentTime + 0.2);
+  osc.stop(audioCtx.currentTime + 0.18);
 }
 
-// ===== 生成金幣 =====
+/* 生成錢幣 */
 function spawn() {
   const el = document.createElement("div");
 
-  const value = Math.random() < 0.6 ? 1 :
-                Math.random() < 0.85 ? 2 : 3;
+  const value =
+    Math.random() < 0.6 ? 1 :
+    Math.random() < 0.85 ? 2 : 3;
 
   el.className = "coin v" + value;
-  el.textContent = value;
 
   game.appendChild(el);
 
   items.push({
     el,
     value,
-    x: Math.random() * (W - 40),
-    y: -40,
-    vy: 120 + level * 20,
-    vx: (Math.random() - 0.5) * 60
+    x: Math.random() * (W - 42),
+    y: -50,
+    vy: 130 + level * 25,
+    vx: (Math.random() - 0.5) * 70
   });
 }
 
-// 一開始就掉
+/* 一開始就有錢幣 */
 for (let i = 0; i < 6; i++) spawn();
 
-// ===== 玩家控制 =====
+/* 玩家控制 */
 function movePlayer(x) {
   player.style.left = x + "px";
 }
 
-document.addEventListener("mousemove", e => {
-  movePlayer(e.clientX);
-});
-
-document.addEventListener("touchstart", e => {
-  initAudio();
-});
-
+document.addEventListener("mousemove", e => movePlayer(e.clientX));
+document.addEventListener("touchstart", e => initAudio());
 document.addEventListener("touchmove", e => {
   movePlayer(e.touches[0].clientX);
 });
 
-// ===== 碰撞 =====
+/* 碰撞 */
 function hit(a, b) {
   const ar = a.getBoundingClientRect();
   const br = b.getBoundingClientRect();
@@ -150,22 +174,23 @@ function hit(a, b) {
            ar.top > br.bottom);
 }
 
-// ===== 更新 =====
+/* 更新 */
 function update(dt) {
-  if (Math.random() < 0.05) spawn();
+  if (Math.random() < 0.06) spawn();
 
   items.forEach((item, i) => {
     item.y += item.vy * dt;
     item.x += item.vx * dt;
 
-    if (item.x < 0 || item.x > W - 40) item.vx *= -1;
+    if (item.x < 0 || item.x > W - 42) item.vx *= -1;
 
     item.el.style.transform =
       `translate(${item.x}px, ${item.y}px)`;
 
     if (hit(item.el, player)) {
-      const freq = item.value === 1 ? 440 :
-                   item.value === 2 ? 660 : 880;
+      const freq =
+        item.value === 1 ? 520 :
+        item.value === 2 ? 720 : 980;
 
       playTone(freq);
 
@@ -180,14 +205,14 @@ function update(dt) {
       items.splice(i, 1);
     }
 
-    if (item.y > H + 50) {
+    if (item.y > H + 60) {
       item.el.remove();
       items.splice(i, 1);
     }
   });
 }
 
-// ===== 主迴圈 =====
+/* 主迴圈 */
 let last = performance.now();
 function loop(now) {
   const dt = (now - last) / 1000;
