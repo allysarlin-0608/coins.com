@@ -1,261 +1,166 @@
 import streamlit as st
-from streamlit.components.v1 import html
+import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Emoji Coin Catcher", layout="wide")
+st.set_page_config(layout="wide")
 
-HTML = """
-<!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+# ===== CSS =====
+st.markdown("""
 <style>
 body {
-  margin: 0;
-  overflow: hidden;
-  background: linear-gradient(#111, #000);
-  touch-action: none;
-  color: white;
-  font-family: system-ui, -apple-system;
+    background-color: #111;
 }
-
 #game {
-  position: relative;
-  width: 100vw;
-  height: 100vh;
+    position: relative;
+    width: 100vw;
+    height: 80vh;
+    overflow: hidden;
+    background: linear-gradient(#222, #000);
 }
-
-/* UI */
-#ui {
-  position: fixed;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 16px;
-  z-index: 10;
-}
-
-.ui-box {
-  background: rgba(0,0,0,0.6);
-  padding: 6px 12px;
-  border-radius: 12px;
-  font-size: 15px;
-}
-
-/* 掉落物 */
 .item {
-  position: absolute;
-  font-size: 36px;
-  user-select: none;
-  transition: transform 0.2s ease, opacity 0.2s ease;
+    position: absolute;
+    font-size: 40px;
+    user-select: none;
 }
-
-/* 玩家 */
 #player {
-  position: absolute;
-  bottom: 24px;
-  left: 50%;
-  width: 90px;
-  height: 22px;
-  background: linear-gradient(#eee, #aaa);
-  border-radius: 12px;
-  transform: translateX(-50%);
+    position: absolute;
+    bottom: 10px;
+    font-size: 50px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+#hud {
+    color: white;
+    font-size: 20px;
+    margin-bottom: 10px;
 }
 </style>
-</head>
+""", unsafe_allow_html=True)
 
-<body>
-
-<div id="ui">
-  <div class="ui-box">❤️ <span id="life">5</span></div>
-  <div class="ui-box">⭐ <span id="score">0</span></div>
-  <div class="ui-box">🚀 <span id="level">1</span></div>
-  <div class="ui-box">🎯 <span id="target">200</span></div>
+# ===== HTML + JS =====
+components.html("""
+<div id="hud">
+❤️ Life: <span id="life">5</span>　
+⭐ Score: <span id="score">0</span>　
+🏁 Level: <span id="level">1</span>
 </div>
 
 <div id="game">
-  <div id="player"></div>
+    <div id="player">🧺</div>
 </div>
 
 <script>
-const game = document.getElementById("game");
-const player = document.getElementById("player");
-
-const lifeEl = document.getElementById("life");
-const scoreEl = document.getElementById("score");
-const levelEl = document.getElementById("level");
-const targetEl = document.getElementById("target");
-
-const W = window.innerWidth;
-const H = window.innerHeight;
-
-let items = [];
-let audioCtx = null;
+let game = document.getElementById("game");
+let player = document.getElementById("player");
 
 let life = 5;
 let score = 0;
 let level = 1;
-let target = 200;
-let running = true;
+let levelTarget = 200;
 
-/* 音訊初始化（需互動） */
-function initAudio() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
+let items = [];
+let playerX = window.innerWidth / 2;
+
+document.addEventListener("mousemove", e => {
+    playerX = e.clientX;
+    player.style.left = playerX + "px";
+});
+
+document.addEventListener("touchmove", e => {
+    playerX = e.touches[0].clientX;
+    player.style.left = playerX + "px";
+});
+
+// ===== 音效 =====
+function playSound(freq) {
+    let ctx = new (window.AudioContext || window.webkitAudioContext)();
+    let osc = ctx.createOscillator();
+    osc.frequency.value = freq;
+    osc.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.15);
 }
 
-/* 播放音效 */
-function playTone(freq, duration = 0.2) {
-  if (!audioCtx) return;
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.type = "triangle";
-  osc.frequency.value = freq;
-  gain.gain.value = 0.25;
-  gain.gain.exponentialRampToValueAtTime(
-    0.001, audioCtx.currentTime + duration
-  );
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-  osc.start();
-  osc.stop(audioCtx.currentTime + duration);
-}
-
-/* 生成物品 */
+// ===== 掉落物生成 =====
 function spawn() {
-  const el = document.createElement("div");
-  el.className = "item";
+    let el = document.createElement("div");
+    el.className = "item";
 
-  const r = Math.random();
-  let type;
+    let isBomb = Math.random() < 0.25;
+    let value = isBomb ? 0 : [10,20,50][Math.floor(Math.random()*3)];
 
-  if (r < 0.1) {
-    type = "bomb";
-    el.textContent = "💣";
-  } else if (r < 0.6) {
-    type = "coin1";
-    el.textContent = "🪙";
-  } else if (r < 0.9) {
-    type = "coin2";
-    el.textContent = "💰";
-  } else {
-    type = "coin3";
-    el.textContent = "💎";
-  }
+    el.innerText = isBomb ? "💣" : (value === 10 ? "🪙" : value === 20 ? "💰" : "💎");
 
-  game.appendChild(el);
+    el.style.left = Math.random() * (window.innerWidth - 50) + "px";
+    el.style.top = "-50px";
+    game.appendChild(el);
 
-  items.push({
-    el,
-    type,
-    x: Math.random() * (W - 40),
-    y: -50,
-    vy: 150 + level * 30,
-    vx: (Math.random() - 0.5) * 80
-  });
+    items.push({
+        el,
+        y: -50,
+        speed: 3 + level,
+        isBomb,
+        value
+    });
 }
 
-/* 初始掉落 */
-for (let i = 0; i < 6; i++) spawn();
+// ===== 主遊戲迴圈 =====
+function update() {
+    // 掉落頻率（一開始就有）
+    if (Math.random() < 0.08) spawn();
 
-/* 玩家控制 */
-function movePlayer(x) {
-  player.style.left = x + "px";
-}
+    items.forEach((item, i) => {
+        item.y += item.speed;
+        item.el.style.top = item.y + "px";
 
-document.addEventListener("mousemove", e => movePlayer(e.clientX));
-document.addEventListener("touchstart", () => initAudio());
-document.addEventListener("touchmove", e => movePlayer(e.touches[0].clientX));
+        let rect = item.el.getBoundingClientRect();
+        let playerRect = player.getBoundingClientRect();
 
-/* 碰撞判定 */
-function hit(a, b) {
-  const ar = a.getBoundingClientRect();
-  const br = b.getBoundingClientRect();
-  return !(ar.right < br.left ||
-           ar.left > br.right ||
-           ar.bottom < br.top ||
-           ar.top > br.bottom);
-}
+        // 碰撞
+        if (
+            rect.bottom > playerRect.top &&
+            rect.left < playerRect.right &&
+            rect.right > playerRect.left
+        ) {
+            if (item.isBomb) {
+                life--;
+                playSound(120);
+                if (navigator.vibrate) navigator.vibrate(300);
+            } else {
+                score += item.value;
+                playSound(item.value === 10 ? 400 : item.value === 20 ? 600 : 900);
+                if (navigator.vibrate) navigator.vibrate(100);
+            }
 
-/* 下一關 */
-function nextLevel() {
-  level++;
-  target += 200;
-  levelEl.textContent = level;
-  targetEl.textContent = target;
-}
+            document.getElementById("life").innerText = life;
+            document.getElementById("score").innerText = score;
 
-/* Game Over */
-function gameOver() {
-  running = false;
-  alert("💥 Game Over\\n分數：" + score);
-  location.reload();
-}
+            item.el.remove();
+            items.splice(i,1);
+        }
 
-/* 更新 */
-function update(dt) {
-  if (!running) return;
+        // 掉出畫面
+        if (item.y > window.innerHeight) {
+            item.el.remove();
+            items.splice(i,1);
+        }
+    });
 
-  if (Math.random() < 0.09) spawn();
-
-  items.forEach((item, i) => {
-    item.y += item.vy * dt;
-    item.x += item.vx * dt;
-
-    if (item.x < 0 || item.x > W - 40) item.vx *= -1;
-
-    item.el.style.transform =
-      `translate(${item.x}px, ${item.y}px)`;
-
-    if (hit(item.el, player)) {
-      if (item.type === "bomb") {
-        life--;
-        lifeEl.textContent = life;
-        playTone(200, 0.3);
-        if (navigator.vibrate) navigator.vibrate(120);
-        if (life <= 0) gameOver();
-      } else {
-        let pts = item.type === "coin1" ? 10 :
-                  item.type === "coin2" ? 25 : 50;
-        let freq = item.type === "coin1" ? 520 :
-                   item.type === "coin2" ? 740 : 1000;
-        score += pts;
-        scoreEl.textContent = score;
-        playTone(freq);
-        if (navigator.vibrate) navigator.vibrate(30);
-      }
-
-      item.el.style.transform += " scale(1.6)";
-      item.el.style.opacity = "0";
-      setTimeout(() => item.el.remove(), 200);
-      items.splice(i, 1);
+    // 關卡提升（間距大）
+    if (score >= levelTarget) {
+        level++;
+        levelTarget += 300;
+        document.getElementById("level").innerText = level;
     }
 
-    if (item.y > H + 60) {
-      item.el.remove();
-      items.splice(i, 1);
+    // Game Over
+    if (life <= 0) {
+        alert("Game Over! Final Score: " + score);
+        location.reload();
     }
-  });
 
-  if (score >= target) nextLevel();
+    requestAnimationFrame(update);
 }
 
-/* 主迴圈 */
-let last = performance.now();
-function loop(now) {
-  const dt = (now - last) / 1000;
-  last = now;
-  update(dt);
-  requestAnimationFrame(loop);
-}
-requestAnimationFrame(loop);
+update();
 </script>
-
-</body>
-</html>
-"""
-
-html(HTML, height=800)
+""", height=800)
