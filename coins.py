@@ -1,185 +1,202 @@
-import streamlit as st
-from streamlit.components.v1 import html
-
-st.set_page_config(page_title="Coin Catcher", layout="centered")
-
-SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
-SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
-
-HTML = f"""
 <!DOCTYPE html>
-<html>
+<html lang="zh-Hant">
 <head>
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Falling Coins Game</title>
+
 <style>
-body{{margin:0;font-family:sans-serif;background:#000;}}
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: #111;
+    touch-action: none;
+  }
 
-#game{{
-    height:420px;
-    border-radius:18px;
-    position:relative;
-    overflow:hidden;
-    background:linear-gradient(270deg,#ff6ec4,#7873f5,#42e695);
-    background-size:600% 600%;
-    animation:bg 12s ease infinite;
-}}
+  #game {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+  }
 
-@keyframes bg{{
-    0%{{background-position:0% 50%}}
-    50%{{background-position:100% 50%}}
-    100%{{background-position:0% 50%}}
-}}
+  .coin {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    color: #000;
+    user-select: none;
+    transition: transform 0.2s, opacity 0.2s;
+  }
 
-#bag{{
-    position:absolute;
-    bottom:12px;
-    left:50%;
-    font-size:48px;
-    transform:translateX(-50%);
-}}
+  .v1 { background: gold; }
+  .v2 { background: deepskyblue; }
+  .v3 { background: violet; }
 
-.item{{position:absolute;font-size:28px;}}
-
-#overlay{{
-    position:absolute;
-    inset:0;
-    background:rgba(0,0,0,.75);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    flex-direction:column;
-    color:white;
-    z-index:10;
-}}
+  #player {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    width: 80px;
+    height: 20px;
+    background: white;
+    border-radius: 10px;
+    transform: translateX(-50%);
+  }
 </style>
 </head>
 
 <body>
-
 <div id="game">
-    <div id="bag">👜</div>
-    <div id="overlay">
-        <input id="name" placeholder="玩家名稱">
-        <div id="msg" style="margin:8px"></div>
-        <button onclick="start()">開始遊戲</button>
-    </div>
-</div>
-
-<div style="color:white;display:flex;justify-content:space-between;margin-top:6px">
-    <div>❤️ <span id="life">5</span></div>
-    <div>分數 <span id="score">0</span></div>
-    <div>關卡 <span id="level">1</span></div>
-    <div>目標 <span id="target">200</span></div>
+  <div id="player"></div>
 </div>
 
 <script>
 const game = document.getElementById("game");
-const bag = document.getElementById("bag");
-const overlay = document.getElementById("overlay");
-const msg = document.getElementById("msg");
+const player = document.getElementById("player");
+
+const W = window.innerWidth;
+const H = window.innerHeight;
 
 let items = [];
-let score = 0;
 let level = 1;
-let life = 5;
-let target = 200;
-let running = false;
-let last = 0;
+let audioCtx;
+let started = false;
 
-// ✅ 關鍵修正：start 時重設 last
-function start() {{
-    const name = document.getElementById("name").value.trim();
-    if(!name) {{
-        msg.innerText = "請輸入玩家名稱";
-        return;
-    }}
+// ====== 啟動音訊（必須互動）======
+function initAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+}
 
-    score = 0;
-    level = 1;
-    life = 5;
-    target = 200;
-    items.forEach(i => i.el.remove());
-    items = [];
+// ====== 播放音調 ======
+function playTone(freq) {
+  if (!audioCtx) return;
 
-    document.getElementById("score").innerText = score;
-    document.getElementById("level").innerText = level;
-    document.getElementById("life").innerText = life;
-    document.getElementById("target").innerText = target;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
 
-    overlay.style.display = "none";
+  osc.frequency.value = freq;
+  osc.type = "sine";
 
-    last = performance.now();   // ⭐⭐⭐ 這一行是關鍵
-    running = true;
+  gain.gain.value = 0.15;
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
 
-    spawn();
-    spawn();
-}}
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
 
-function spawn() {{
-    const isBomb = Math.random() < 0.25;
-    const el = document.createElement("div");
-    el.className = "item";
-    el.textContent = isBomb ? "💣" : "🪙";
-    el.style.left = Math.random() * 90 + "%";
-    el.style.top = "-30px";
-    game.appendChild(el);
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.2);
+}
 
-    items.push({{ el, isBomb, y:0, vy:60 + level * 20 }});
-}}
+// ====== 生成金幣 ======
+function spawn() {
+  const el = document.createElement("div");
 
-function loop(t) {{
-    requestAnimationFrame(loop);
-    if(!running) return;
+  const value = Math.random() < 0.6 ? 1 :
+                Math.random() < 0.85 ? 2 : 3;
 
-    const dt = (t - last) / 1000;
-    last = t;
+  el.className = `coin v${value}`;
+  el.textContent = value;
 
-    if(Math.random() < 0.02 + level * 0.008) spawn();
+  game.appendChild(el);
 
-    items = items.filter(it => {{
-        it.y += it.vy * dt;
-        it.el.style.top = it.y + "px";
+  items.push({
+    el,
+    value,
+    x: Math.random() * (W - 40),
+    y: -40,
+    vy: 80 + level * 20,
+    vx: (Math.random() - 0.5) * 50
+  });
+}
 
-        const r = it.el.getBoundingClientRect();
-        const b = bag.getBoundingClientRect();
+// 遊戲一開始就掉
+for (let i = 0; i < 5; i++) spawn();
 
-        if(r.bottom >= b.top && r.left < b.right && r.right > b.left) {{
-            if(it.isBomb) {{
-                life--;
-                document.getElementById("life").innerText = life;
-                if(life <= 0) {{
-                    running = false;
-                    overlay.style.display = "flex";
-                    msg.innerText = "遊戲結束";
-                }}
-            }} else {{
-                score += 10;
-                document.getElementById("score").innerText = score;
-            }}
-            it.el.remove();
-            return false;
-        }}
+// ====== 玩家控制（滑鼠＋觸控）======
+function movePlayer(x) {
+  player.style.left = `${x}px`;
+}
 
-        if(it.y > 450) {{
-            it.el.remove();
-            return false;
-        }}
+document.addEventListener("mousemove", e => {
+  movePlayer(e.clientX);
+});
 
-        return true;
-    }});
-}}
+document.addEventListener("touchstart", e => {
+  initAudio();
+  started = true;
+});
 
-game.addEventListener("mousemove", e => {{
-    if(!running) return;
-    const x = e.clientX - game.getBoundingClientRect().left;
-    bag.style.left = Math.max(0, Math.min(game.offsetWidth, x)) + "px";
-}});
+document.addEventListener("touchmove", e => {
+  movePlayer(e.touches[0].clientX);
+});
 
+// ====== 碰撞判定 ======
+function hit(a, b) {
+  const ar = a.getBoundingClientRect();
+  const br = b.getBoundingClientRect();
+  return !(ar.right < br.left ||
+           ar.left > br.right ||
+           ar.bottom < br.top ||
+           ar.top > br.bottom);
+}
+
+// ====== 主更新 ======
+function update(dt) {
+  if (Math.random() < 0.04) spawn();
+
+  items.forEach((item, i) => {
+    item.y += item.vy * dt;
+    item.x += item.vx * dt;
+
+    if (item.x < 0 || item.x > W - 40) item.vx *= -1;
+
+    item.el.style.transform =
+      `translate(${item.x}px, ${item.y}px)`;
+
+    // 撞到玩家
+    if (hit(item.el, player)) {
+      const freq = item.value === 1 ? 440 :
+                   item.value === 2 ? 660 : 880;
+
+      playTone(freq);
+
+      // 📳 震動
+      if (navigator.vibrate) {
+        navigator.vibrate(item.value === 3 ? 60 : 30);
+      }
+
+      // ✨ 動畫
+      item.el.style.transform += " scale(1.5)";
+      item.el.style.opacity = "0";
+
+      setTimeout(() => item.el.remove(), 200);
+      items.splice(i, 1);
+    }
+
+    // 掉出畫面
+    if (item.y > H + 50) {
+      item.el.remove();
+      items.splice(i, 1);
+    }
+  });
+}
+
+// ====== Loop ======
+let last = performance.now();
+function loop(now) {
+  const dt = (now - last) / 1000;
+  last = now;
+  update(dt);
+  requestAnimationFrame(loop);
+}
 requestAnimationFrame(loop);
 </script>
-
 </body>
 </html>
-"""
-
-html(HTML, height=700)
