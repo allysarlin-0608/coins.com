@@ -16,6 +16,8 @@ body {
   overflow: hidden;
   background: linear-gradient(#111, #000);
   touch-action: none;
+  color: white;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont;
 }
 
 #game {
@@ -24,12 +26,29 @@ body {
   height: 100vh;
 }
 
-/* 🪙 Emoji 錢幣 */
+/* UI */
+#ui {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 18px;
+  font-size: 16px;
+  z-index: 10;
+}
+
+.ui-box {
+  background: rgba(0,0,0,0.6);
+  padding: 6px 12px;
+  border-radius: 10px;
+}
+
+/* 錢幣 */
 .coin {
   position: absolute;
   font-size: 36px;
   user-select: none;
-  will-change: transform;
   transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
@@ -43,12 +62,19 @@ body {
   background: linear-gradient(#eee, #aaa);
   border-radius: 12px;
   transform: translateX(-50%);
-  box-shadow: 0 4px 10px rgba(0,0,0,0.6);
 }
 </style>
 </head>
 
 <body>
+
+<div id="ui">
+  <div class="ui-box">❤️ <span id="life">5</span></div>
+  <div class="ui-box">⭐ 分數 <span id="score">0</span></div>
+  <div class="ui-box">🚀 關卡 <span id="level">1</span></div>
+  <div class="ui-box">🎯 目標 <span id="target">200</span></div>
+</div>
+
 <div id="game">
   <div id="player"></div>
 </div>
@@ -57,59 +83,60 @@ body {
 const game = document.getElementById("game");
 const player = document.getElementById("player");
 
+const lifeEl = document.getElementById("life");
+const scoreEl = document.getElementById("score");
+const levelEl = document.getElementById("level");
+const targetEl = document.getElementById("target");
+
 const W = window.innerWidth;
 const H = window.innerHeight;
 
 let items = [];
-let level = 1;
 let audioCtx = null;
 
-/* 啟用音訊（必須互動） */
+/* 遊戲狀態 */
+let life = 5;
+let score = 0;
+let level = 1;
+let target = 200;
+let running = true;
+
+/* 音訊初始化 */
 function initAudio() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }
 }
 
-/* 播放音調 */
+/* 播放音效 */
 function playTone(freq) {
   if (!audioCtx) return;
-
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
-
   osc.type = "triangle";
   osc.frequency.value = freq;
-
   gain.gain.value = 0.2;
-  gain.gain.exponentialRampToValueAtTime(
-    0.001, audioCtx.currentTime + 0.2
-  );
-
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
   osc.connect(gain);
   gain.connect(audioCtx.destination);
-
   osc.start();
   osc.stop(audioCtx.currentTime + 0.2);
 }
 
-/* 生成 Emoji 錢幣 */
+/* 生成錢幣 */
 function spawn() {
   const el = document.createElement("div");
   el.className = "coin";
 
   const r = Math.random();
-  let value, emoji;
+  let value, emoji, points, freq;
 
   if (r < 0.6) {
-    value = 1;
-    emoji = "🪙";
+    emoji = "🪙"; points = 10; freq = 520;
   } else if (r < 0.9) {
-    value = 2;
-    emoji = "💰";
+    emoji = "💰"; points = 25; freq = 740;
   } else {
-    value = 3;
-    emoji = "💎";
+    emoji = "💎"; points = 50; freq = 1000;
   }
 
   el.textContent = emoji;
@@ -117,10 +144,11 @@ function spawn() {
 
   items.push({
     el,
-    value,
+    points,
+    freq,
     x: Math.random() * (W - 40),
     y: -50,
-    vy: 140 + level * 25,
+    vy: 150 + level * 30,
     vx: (Math.random() - 0.5) * 80
   });
 }
@@ -134,10 +162,8 @@ function movePlayer(x) {
 }
 
 document.addEventListener("mousemove", e => movePlayer(e.clientX));
-document.addEventListener("touchstart", e => initAudio());
-document.addEventListener("touchmove", e => {
-  movePlayer(e.touches[0].clientX);
-});
+document.addEventListener("touchstart", () => initAudio());
+document.addEventListener("touchmove", e => movePlayer(e.touches[0].clientX));
 
 /* 碰撞 */
 function hit(a, b) {
@@ -149,10 +175,26 @@ function hit(a, b) {
            ar.top > br.bottom);
 }
 
+/* 下一關 */
+function nextLevel() {
+  level++;
+  target += 200;
+  levelEl.textContent = level;
+  targetEl.textContent = target;
+}
+
+/* Game Over */
+function gameOver() {
+  running = false;
+  alert("Game Over\\n你的分數：" + score);
+  location.reload();
+}
+
 /* 更新 */
 function update(dt) {
-  /* 掉落頻率（一開始就很多） */
-  if (Math.random() < 0.07) spawn();
+  if (!running) return;
+
+  if (Math.random() < 0.08) spawn();
 
   items.forEach((item, i) => {
     item.y += item.vy * dt;
@@ -164,21 +206,15 @@ function update(dt) {
       `translate(${item.x}px, ${item.y}px)`;
 
     if (hit(item.el, player)) {
-      const freq =
-        item.value === 1 ? 520 :
-        item.value === 2 ? 740 : 1000;
+      playTone(item.freq);
 
-      playTone(freq);
-
-      /* 📳 手機震動 */
       if (navigator.vibrate) {
-        navigator.vibrate(
-          item.value === 3 ? 70 :
-          item.value === 2 ? 45 : 25
-        );
+        navigator.vibrate(item.points === 50 ? 70 : 30);
       }
 
-      /* ✨ 動畫 */
+      score += item.points;
+      scoreEl.textContent = score;
+
       item.el.style.transform += " scale(1.6)";
       item.el.style.opacity = "0";
 
@@ -189,8 +225,15 @@ function update(dt) {
     if (item.y > H + 60) {
       item.el.remove();
       items.splice(i, 1);
+      life--;
+      lifeEl.textContent = life;
+      if (life <= 0) gameOver();
     }
   });
+
+  if (score >= target) {
+    nextLevel();
+  }
 }
 
 /* 主迴圈 */
