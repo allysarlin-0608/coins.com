@@ -73,9 +73,6 @@ body{{margin:0;font-family:sans-serif;background:#000;}}
 </div>
 
 <script>
-const SUPA_URL = "{SUPABASE_URL}";
-const SUPA_KEY = "{SUPABASE_KEY}";
-
 const game = document.getElementById("game");
 const bag = document.getElementById("bag");
 const overlay = document.getElementById("overlay");
@@ -87,9 +84,9 @@ let level = 1;
 let life = 5;
 let target = 200;
 let running = false;
-let last = performance.now();
+let last = 0;
 
-// --- 開始遊戲 ---
+// ✅ 關鍵修正：start 時重設 last
 function start() {{
     const name = document.getElementById("name").value.trim();
     if(!name) {{
@@ -110,54 +107,33 @@ function start() {{
     document.getElementById("target").innerText = target;
 
     overlay.style.display = "none";
+
+    last = performance.now();   // ⭐⭐⭐ 這一行是關鍵
     running = true;
 
-    // ⭐ 一開始就先掉 2 個
     spawn();
     spawn();
 }}
 
-// --- 生成物品 ---
 function spawn() {{
-    const bombChance = Math.min(0.1 + level * 0.04, 0.5);
-    const isBomb = Math.random() < bombChance;
-
+    const isBomb = Math.random() < 0.25;
     const el = document.createElement("div");
     el.className = "item";
     el.textContent = isBomb ? "💣" : "🪙";
     el.style.left = Math.random() * 90 + "%";
     el.style.top = "-30px";
-
     game.appendChild(el);
+
     items.push({{ el, isBomb, y:0, vy:60 + level * 20 }});
 }}
 
-// --- 下一關 ---
-function nextLevel() {{
-    level++;
-    life = 5;
-    target = level * 200;
-
-    document.getElementById("level").innerText = level;
-    document.getElementById("life").innerText = life;
-    document.getElementById("target").innerText = target;
-}}
-
-// --- Game Over ---
-function gameOver() {{
-    running = false;
-    overlay.style.display = "flex";
-    msg.innerText = "遊戲結束";
-}}
-
-// --- 主迴圈 ---
 function loop(t) {{
+    requestAnimationFrame(loop);
     if(!running) return;
 
     const dt = (t - last) / 1000;
     last = t;
 
-    // ⭐ 掉落頻率提高
     if(Math.random() < 0.02 + level * 0.008) spawn();
 
     items = items.filter(it => {{
@@ -171,7 +147,11 @@ function loop(t) {{
             if(it.isBomb) {{
                 life--;
                 document.getElementById("life").innerText = life;
-                if(life <= 0) gameOver();
+                if(life <= 0) {{
+                    running = false;
+                    overlay.style.display = "flex";
+                    msg.innerText = "遊戲結束";
+                }}
             }} else {{
                 score += 10;
                 document.getElementById("score").innerText = score;
@@ -187,36 +167,13 @@ function loop(t) {{
 
         return true;
     }});
-
-    if(score >= target) {{
-        running = false;
-        overlay.style.display = "flex";
-        msg.innerText = "🎉 過關";
-        setTimeout(() => {{
-            overlay.style.display = "none";
-            msg.innerText = "";
-            nextLevel();
-            running = true;
-            spawn(); // 過關後立刻再來
-        }}, 1500);
-    }}
-
-    requestAnimationFrame(loop);
 }}
 
-// --- 控制 ---
 game.addEventListener("mousemove", e => {{
     if(!running) return;
     const x = e.clientX - game.getBoundingClientRect().left;
     bag.style.left = Math.max(0, Math.min(game.offsetWidth, x)) + "px";
 }});
-
-game.addEventListener("touchmove", e => {{
-    if(!running) return;
-    e.preventDefault();
-    const x = e.touches[0].clientX - game.getBoundingClientRect().left;
-    bag.style.left = Math.max(0, Math.min(game.offsetWidth, x)) + "px";
-}}, {{ passive:false }});
 
 requestAnimationFrame(loop);
 </script>
