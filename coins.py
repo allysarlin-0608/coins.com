@@ -89,6 +89,7 @@ let target = 200;
 let running = false;
 let last = performance.now();
 
+// --- 開始遊戲 ---
 function start() {{
     const name = document.getElementById("name").value.trim();
     if(!name) {{
@@ -108,11 +109,15 @@ function start() {{
     document.getElementById("life").innerText = life;
     document.getElementById("target").innerText = target;
 
-    msg.innerText = "";
     overlay.style.display = "none";
     running = true;
+
+    // ⭐ 一開始就先掉 2 個
+    spawn();
+    spawn();
 }}
 
+// --- 生成物品 ---
 function spawn() {{
     const bombChance = Math.min(0.1 + level * 0.04, 0.5);
     const isBomb = Math.random() < bombChance;
@@ -127,6 +132,7 @@ function spawn() {{
     items.push({{ el, isBomb, y:0, vy:60 + level * 20 }});
 }}
 
+// --- 下一關 ---
 function nextLevel() {{
     level++;
     life = 5;
@@ -137,35 +143,22 @@ function nextLevel() {{
     document.getElementById("target").innerText = target;
 }}
 
+// --- Game Over ---
 function gameOver() {{
     running = false;
     overlay.style.display = "flex";
     msg.innerText = "遊戲結束";
-
-    if(SUPA_URL && SUPA_KEY) {{
-        fetch(SUPA_URL + "/rest/v1/leaderboard", {{
-            method: "POST",
-            headers: {{
-                "apikey": SUPA_KEY,
-                "Authorization": "Bearer " + SUPA_KEY,
-                "Content-Type": "application/json"
-            }},
-            body: JSON.stringify({{
-                name: document.getElementById("name").value,
-                score: score,
-                level: level
-            }})
-        }});
-    }}
 }}
 
+// --- 主迴圈 ---
 function loop(t) {{
     if(!running) return;
 
     const dt = (t - last) / 1000;
     last = t;
 
-    if(Math.random() < 0.013 + level * 0.006) spawn();
+    // ⭐ 掉落頻率提高
+    if(Math.random() < 0.02 + level * 0.008) spawn();
 
     items = items.filter(it => {{
         it.y += it.vy * dt;
@@ -204,12 +197,14 @@ function loop(t) {{
             msg.innerText = "";
             nextLevel();
             running = true;
+            spawn(); // 過關後立刻再來
         }}, 1500);
     }}
 
     requestAnimationFrame(loop);
 }}
 
+// --- 控制 ---
 game.addEventListener("mousemove", e => {{
     if(!running) return;
     const x = e.clientX - game.getBoundingClientRect().left;
