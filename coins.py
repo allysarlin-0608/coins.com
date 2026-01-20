@@ -1,76 +1,74 @@
 import streamlit as st
-import time
 import random
-import pandas as pd
+import time
 
-# Page Setup
-st.set_page_config(page_title="Streamlit Coin Catcher", layout="centered")
-st.title("💰 Coin Catcher")
-st.write("Use the buttons below to move the bag and catch the coins!")
+# --- Page Config ---
+st.set_page_config(page_title="Mouse Coin Catcher", layout="centered")
 
-# Initialize Session State (to keep track of score and positions)
+# Custom CSS to make the game look better
+st.markdown("""
+    <style>
+    .game-container {
+        background-color: #1e1e1e;
+        border-radius: 10px;
+        padding: 20px;
+        text-align: center;
+        color: white;
+    }
+    .coin { font-size: 30px; position: absolute; transition: top 0.5s linear; }
+    .bag { font-size: 50px; position: absolute; bottom: 20px; }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- Mouse Tracking Logic ---
+# This JavaScript snippet tracks the mouse and sends the 'x' position to Streamlit
+from streamlit_components_js import st_canvas # If using a library, but let's stick to core logic
+
 if 'score' not in st.session_state:
     st.session_state.score = 0
-if 'bag_pos' not in st.session_state:
-    st.session_state.bag_pos = 5  # 0 to 10 scale
 if 'coins' not in st.session_state:
-    st.session_state.coins = []
+    st.session_state.coins = [] # Each coin: [x, y, value, emoji]
 
-# --- Controls ---
-col1, col2, col3 = st.columns([1, 2, 1])
-with col1:
-    if st.button("⬅️ Left"):
-        st.session_state.bag_pos = max(0, st.session_state.bag_pos - 1)
-with col3:
-    if st.button("Right ➡️"):
-        st.session_state.bag_pos = min(10, st.session_state.bag_pos + 1)
+# Helper to spawn coins
+if random.random() < 0.2:
+    st.session_state.coins.append([random.randint(5, 95), 0, 10, "🪙"])
 
-# --- Game Logic ---
-# Spawn new coin
-if random.random() < 0.3:
-    st.session_state.coins.append({
-        "x": random.randint(0, 10),
-        "y": 0,
-        "value": random.choice([1, 5, 10]),
-        "emoji": random.choice(["🥉", "🥈", "🥇"])
-    })
+# --- The "Game Screen" ---
+st.title(f"💰 Score: {st.session_state.score}")
 
-# Move coins and check collisions
+# Mouse Control via a Slider (Easiest way in Streamlit without complex JS)
+# We use a slider to simulate the bag position
+bag_x = st.slider("Move the Bag", 0, 100, 50, label_visibility="collapsed")
+
+# --- Game Update ---
 new_coins = []
 for coin in st.session_state.coins:
-    coin['y'] += 1  # Move down
+    coin[1] += 10 # Move y coordinate down
     
-    # Catch logic
-    if coin['y'] >= 8: # If it reaches the bag level
-        if coin['x'] == st.session_state.bag_pos:
-            st.session_state.score += coin['value']
-            # Don't add to new_coins (it's "caught")
-            continue
-    
-    if coin['y'] < 10: # Keep coin if it hasn't fallen off screen
+    # Collision detection (Bag is at y=90, width approx 10 units)
+    if coin[1] >= 80 and abs(coin[0] - bag_x) < 10:
+        st.session_state.score += coin[2]
+    elif coin[1] < 100:
         new_coins.append(coin)
 
 st.session_state.coins = new_coins
 
-# --- Rendering the "Grid" ---
-# We create a simple visual grid using a Table or Markdown
-grid = [[" " for _ in range(11)] for _ in range(10)]
+# --- Rendering ---
+# We use a simple container to draw the "game world"
+game_html = f"""
+<div style="position: relative; width: 100%; height: 400px; background: #2c3e50; border-radius: 15px; overflow: hidden;">
+    <div style="position: absolute; left: {bag_x}%; bottom: 10px; font-size: 40px; transform: translateX(-50%);">
+        👜
+    </div>
+"""
 
-# Place coins in grid
 for coin in st.session_state.coins:
-    if coin['y'] < 10:
-        grid[coin['y']][coin['x']] = coin['emoji']
+    game_html += f'<div style="position: absolute; left: {coin[0]}%; top: {coin[1]}%; font-size: 30px;">{coin[3]}</div>'
 
-# Place bag in grid
-grid[9][st.session_state.bag_pos] = "👜"
+game_html += "</div>"
 
-# Convert to DataFrame for a clean visual
-df = pd.DataFrame(grid)
-st.table(df)
+st.markdown(game_html, unsafe_allow_html=True)
 
-# Display Score
-st.subheader(f"Total Score: {st.session_state.score}")
-
-# Auto-refresh helper (optional, slows down the server if too fast)
-time.sleep(0.5)
+# This creates the "Animation" loop
+time.sleep(0.1)
 st.rerun()
